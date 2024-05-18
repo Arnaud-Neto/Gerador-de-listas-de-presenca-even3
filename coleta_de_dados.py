@@ -1,230 +1,181 @@
 import pandas as pd
-from os import path, getcwd
-from typing import Generator
-import abc
+from typing import Generator, Iterable
+from functools import lru_cache
+from dataclasses import dataclass, field
 
 
 
+class Self_Sorting_List():
 
+    __slots__ = "_lista", 
 
-class Participante():
-
-    id    : int | None = None
-    nome  : str = None
-    email : str | None = None
-    evento: str | None = None
-
-    def __init__(self, nome: str, email: str | None = None, evento: str | None = None, id: int | None = None) -> None:
+    def __init__(self, vals: Iterable[any] | None = None) -> None:
         
-        self.id     = id
-        self.nome   = nome
-        self.email  = email
-        self.evento = evento
+        self._lista: list[any] = list if vals is None else list(vals)
+        self._lista.sort()
+
+
+    def insert(self, val: any, *, final_index:int | None = None, initial_index: int | None = None) -> int:
+
+        # se final_index for None ele recebe o valor len(self._lista) como defaut
+        if final_index is None: final_index = len(self._lista)
+
+        # se initial_index for None ele recebe o valor 0 como defaut
+        if initial_index is None: initial_index = 0
+
+
+        # se final_index e initial_index forem iguais só existe uma posição para colocar o val
+        if final_index == initial_index:
+
+            self._lista.insert(final_index, val) # inserindo na posição
+            return final_index          # retornado a posição
+
+
+        mid: int = (final_index + initial_index)//2 # ponto medio dos index
+
+        # se o ponto medio tiver o mesmo valor que val, nos colocamos val na posição
+        if self._lista[mid] == val:
+
+            self._lista.insert(mid, val) # inserindo na posição
+            return mid     # retornando a posição
+
+
+        # se o ponto medio for maior, como a lista está ordenada, val só pode estar entre initial_index e mid
+        elif self._lista[mid] > val:
+
+            return self.insert(val, final_index= mid, initial_index= initial_index) #chamada recursiva com os novos valores e retorno do resultado
+
+
+        # se o ponto medio for menor, como a lista está ordenada, val só pode estar entre mid e final_index
+        elif self._lista[mid] < val:
+
+            return self.insert(val, final_index= final_index, initial_index= mid) #chamada recursiva com os novos valores e retorno do resultado
         
-
-    
-    def __str__(self) -> str:
-
-        r = "{Nome = " + self.nome
-
-        r += ",\nEmail = " + self.email if self.email is not None else ""
-
-        r += ",\nEvento = " + self.evento if self.evento is not None else ""
-
-        r += ",\nId = " + self.id if self.id is not None else ""
-
-        r += "}\ntype = " + str(type(self))
-
-        return r
-
         
+    def sort(self) -> None:
 
-    def __repr__(self) -> str:
+        self._lista.sort()
 
-        r = "{Nome = " + self.nome
 
-        r += ", Email = " + self.email if self.email is not None else ""
+    def pop(self, pos: int | None = None) -> any:
 
-        r += ", Evento = " + self.evento if self.evento is not None else ""
-
-        r += ", Id = " + self.id if self.id is not None else ""
-
-        r += "}"
-
-        return r
+        return self._lista.pop(pos)
     
 
+    def __get__(self, key: int) -> any:
+        return self._lista[key]
+    
 
-    def __lt__(self,val:object)-> bool:
-        if type(val) == type(self):
-            return self.nome < val.nome
-        raise TypeError(f"Error: type '{type(self)}' can't be conpared to type '{type(val)}'")
+    def __set__(self, key: int, val: any) -> None:
+        self._lista[key] = val
     
-    def __gt__(self,val:object)-> bool:
-        return not (self.__lt__(val) or self.__eq__(val))
-    
-    def __eq__(self, value: object) -> bool:
+
+    def __add__(self, obj: object) -> object:
+
+        # vê se é um iterável
+        if isinstance(obj, Iterable):
+
+            i1 = 0 # indice do self
+            i2 = 0 # indice do obj
+            lista = [] # lista resultante do merge
+
+            obj = sorted(list(obj)) # tranforma o iterável em uma lista ordenada
+
+
+            # como ambas as listas estão ordenadas podemos usar um merge do merge_sort para junta-lás
+            while i1 <= len(self._lista) and i2 <= len(obj):
+                if self._lista[i1] <= obj[i2]:
+                    lista.append(self._lista[i1])
+                    i1 += 1
+                else:
+                    lista.append(obj[i2])
+                    i2 += 1
+                
+            # coloca o que sobrou na lista
+            while i1 <= len(self._lista):
+                lista.append(self._lista[i1])
+                i1 += 1
+
+            # coloca o que sobrou na lista
+            while i2 <= len(obj):
+                lista.append(obj[i2])
+                i2 += 1
+
+            # transforma em um obj self
+            return Self_Sorting_List(lista)
         
-        if isinstance(value, Participante) and self.nome == value.nome:
-            return True
-        return False
-        
-
-
-class Atividade_Participantes():
-    
-    _participantes: list[Participante] = None
-
-    def __init__(self, *participantes: Participante) -> None:
-
-        if len(participantes) == 1 and hasattr(participantes,"__iter__"):
-            self._participantes = list(participantes[0])
         else:
-            self._participantes = participantes
+            
+            retorno = Self_Sorting_List(self) # cria uma copia do self
+            retorno.insert(obj)         # insere o obj
+            return retorno          # retorna o obj
+            
+
+    def __iter__(self) -> Iterable:
+        return iter(self._lista)
 
 
-
-    def __add__(self, val: object | list[Participante] | Participante) -> object:
-
-        if isinstance(val, Atividade_Participantes):
-            return Atividade_Participantes(self._participantes + val._participantes)
-
-        elif isinstance(val, Participante):
-            return Atividade_Participantes(self._participantes + [val])
-
-        elif isinstance(val, list) and all(isinstance(n,Participante) for n in val):
-            return Atividade_Participantes(self._participantes + val)
-
-        else:
-            raise TypeError(f"Error: cant add a '{type(self)}' to a '{type(val)}'")
-        
-    def __sub__(self, val: object | list[Participante] | Participante) -> object:
-
-        if isinstance(val, Atividade_Participantes):
-            return Atividade_Participantes(i for i in self._participantes if i not in val._participantes)
-
-        elif isinstance(val, Participante):
-            return Atividade_Participantes(i for i in self._participantes if i != Participante)
-
-        elif isinstance(val, list) and all(isinstance(n,Participante) for n in val):
-            return Atividade_Participantes(i for i in self._participantes if i not in val)
-
-        else:
-            raise TypeError(f"Error: cant subtract a '{type(self)}' to a '{type(val)}'")
-        
-
-
-    def __get__(self, key: str | int | slice) -> Participante | list[Participante]:
-
-        if isinstance(key, int):
-            return self._participantes[key]
-
-        elif isinstance(key, slice):
-            return self._participantes[key]
-
-        elif isinstance(key, str):
-            return [i for i in self._participantes if i.nome == str]
-
-        else:
-            raise TypeError(f"Error: invalid key type '{type(key)}'")
-
-    def __set__(self,key: str | int ,value: Participante) -> None:
-        
-        if not isinstance(value, Participante):
-            raise TypeError(f"invalid value type '{type(value)}'")
-
-        if isinstance(key, int):
-            self._participantes[key] = value
-
-        elif isinstance(key, str):
-            for i in range(len(self._participantes)):
-                if self._participantes[i].nome == key:
-                    self._participantes[i] = value
-
-        else:
-            raise TypeError(f"Error: invalid key type '{type(key)}'")
-
-
-
-    def __iter__(self) -> object:
-
-        self.i = 0
-        return self
-    
-    def __next__(self) -> Participante:
-
-        if self.i < len(self._participantes):
-            retorno = self._participantes[self.i]
-            self.i += 1
-            return retorno
-
-
-
-    def sort(self, *, key: None = None, reverse:bool=False) -> None:
-        self._participantes.sort(key=key,reverse=reverse)
-
-
-class Atividade():
-
-    id: int | None = None
-    nome: str = None
-    hora_init: str | None = None
-    hora_final: str | None = None
-    local: str | None = None
-    data: str | None = None
-    _participantes: Atividade_Participantes = None
-
-    def __init__(self,nome: str,
-                 hora_init: str | None = None,
-                 hora_final: str | None = None,
-                 local: str | None = None,
-                 data: str | None = None,
-                 id: int | None = None,
-                 *participantes: Participante
-                 ) -> None:
-        
-        self.id = id
-        self.nome = nome
-        self.hora_final = hora_final
-        self.hora_init = hora_init
-        self.data = data
-        self.local = local
-        self._participantes: Atividade_Participantes = Atividade_Participantes(participantes)
-
+    def __next__(self) -> any:
+        return next(self._lista)
 
 
     @property
-    def participantes(self) -> Atividade_Participantes:
-        return self._participantes
+    def lista(self) -> list[any]:
+
+        return self._lista
+    
+
+    @lista.setter
+    def lista(self, vals: Iterable[any] | None = None) -> None:
+
+        self._lista: list[any] = list if vals is None else list(vals)
+        self._lista.sort() 
+
+
+@dataclass(slots=True)
+class Participante():
+
+    nome  : str 
+    id    : int | None = field(default_factory=str)
+    email : str | None = field(default_factory=str)
+
+
+@dataclass(slots=True)
+class Palestrante():
+
+    nome : str
+    descricao: str = field(default_factory=str)
+
+    
+@dataclass(slots=True)
+class Atividade():
+
+    nome: str 
+    id: str | None = field(default_factory=str)
+    local: str | None = field(default_factory=str)
+    data: str | None = field(default_factory=str)
+    hora_init: str | None = field(default_factory=str) 
+    hora_final: str | None = field(default_factory=str)
+    palestrantes: list[str] = field(default_factory=list)
+    _participantes: list[Participante] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+
+        self._participantes.sort()
+
+    @property
+    def participantes(self) -> list[Participante]:
+        return list(self._participantes)
+        
     
     @participantes.setter
-    def participantes(self,val: list[Participante] | Atividade_Participantes) -> None:
-        
-        if isinstance(val, Atividade_Participantes):
-            self._participantes: Atividade_Participantes = val
+    def participantes(self, vals: Iterable[Participante]) -> None:
 
-        elif isinstance(val, list) and all(isinstance(n, Participante) for n in val):
-            self._participantes: Atividade_Participantes = Atividade_Participantes(val)
-
-        else:
-            raise TypeError(f"Error: invalid type '{type(val)}' for propety participantes")
+        self._participantes = list(vals)
+        self._participantes.sort()
 
 
-
-    def __str__(self) -> str:
-        raise NotImplemented
-
-
-
-    def __repr__(self) -> str:
-        raise NotImplemented
-
-
-
-    def sort(self, *, key:None = None, reverse:bool = False) -> None:
-        self._participantes.sort(key=key,reverse=reverse)
-
-
+    
 
 def criar_evento (caminho_participantesXLSX: str = "participantes.xlsx",
                    caminho_atividadesXLSX: str = "atividades.xlsx", /,
@@ -259,26 +210,15 @@ def criar_evento (caminho_participantesXLSX: str = "participantes.xlsx",
 
 if __name__ == "__main__":
 
-    from random import shuffle
+    from random import shuffle, choices
+    from time import time, sleep
 
-    lrand = list(range(100))
-    shuffle(lrand)
-    lp : list[Participante] = [Participante(f"{i}") for i in lrand]
-    print(*lp,sep="\n\n",end="\n\n"+"-"*150)
+    
 
-    input()
 
-    lpr : list[str] = [repr(i) for i in lp]
-    print(*lpr,sep="\n\n",end="\n\n"+"-"*150)
 
-    input()
 
-    lpr.sort()
-    print(*lpr,sep="\n\n",end="\n\n"+"-"*150)
 
-    input()
-
-    lp.sort()
-    print(*lp,sep="\n\n",end="\n\n"+"-"*150)
-
+    
+    
 
